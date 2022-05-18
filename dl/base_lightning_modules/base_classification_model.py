@@ -46,13 +46,13 @@ class BaseClassificationModel(LightningModule):
         self.log("val_loss", 1 - acc, prog_bar=True)
         avg_loss = t.stack([x["val_loss_ce"] for x in outputs]).mean()
         self.log("val_loss_ce", avg_loss, prog_bar=True)
-        self.val_loss_list.append((self.iteration, avg_loss))
+        self.val_loss_list.append((self.iteration, avg_loss.item()))
         self.val_accuracy.reset()
         t.save(
             self.state_dict(), os.path.join(self.params.save_path, "checkpoint.ckpt"),
         )
         plot_train_loss(self.train_loss_list, self.val_loss_list,
-                        save_path=os.path.join(self.params.save_path, "loss vs epochs.png"))
+                        save_path=self.params.save_path)
 
         return {"val_loss": acc}
 

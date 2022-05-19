@@ -15,7 +15,7 @@ from torchvision import transforms, utils
 # load dataa
 from dl.custom_fer_loaders import DataFER
 
-df = pd.read_csv("~/fer2013.csv")
+df = pd.read_csv("fer2013.csv")
 # split train test valid
 df_train = df[df.Usage == 'Training'].drop(['Usage'], axis=1).reset_index().drop(columns="index")
 df_valid = df[df.Usage == 'PrivateTest'].drop(['Usage'], axis=1).reset_index().drop(columns="index")
@@ -65,7 +65,7 @@ class CustomDataModule(LightningDataModule):
             dataset,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=3,
+            num_workers=1,
         )
 
     def val_dataloader(self):
@@ -75,7 +75,7 @@ class CustomDataModule(LightningDataModule):
             dataset,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=3,
+            num_workers=1,
         )
 
     def test_dataloader(self):
@@ -85,7 +85,7 @@ class CustomDataModule(LightningDataModule):
             dataset,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=3,
+            num_workers=1,
         )
 
 

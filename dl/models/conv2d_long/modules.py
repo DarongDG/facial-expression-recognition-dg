@@ -1,3 +1,4 @@
+import ipdb
 from torch import nn
 import torch as t
 from torch.functional import F
@@ -54,19 +55,22 @@ class Conv2dClassifier(nn.Module):
         # 48x48x1
         self.conv1 = ConvBlock(c_in, 64, kernel_size=3, stride=1, padding=1)
         self.max_pool = MaxPool2d(kernel_size=2, stride=2)
-        # 48x48x64
+        # 24x24x64
         self.conv2 = ConvBlock(64, 64, kernel_size=3, stride=1, padding=1)
         self.max_pool = MaxPool2d(kernel_size=2, stride=2)
-        # 24x24x64
+        # 12x12x64
         self.conv3 = ConvBlock(64, 64, kernel_size=3, stride=1, padding=1)
         self.max_pool = MaxPool2d(kernel_size=2, stride=2)
-        # 12x12x64
+        # 6x6x64
         self.conv4 = ConvBlock(64, 64, kernel_size=3, stride=1, padding=1)
         self.max_pool = MaxPool2d(kernel_size=2, stride=2)
-        # 6x6x64
-        self.conv5 = ConvBlock(64, 64, kernel_size=3, stride=1, padding=1)
         # 3x3x64
-        self.classifier = nn.Linear(64 * 6 * 6, num_classes)
+        self.conv5 = ConvBlock(64, 64, kernel_size=3, stride=1, padding=1)
+        self.max_pool = MaxPool2d(kernel_size=2, stride=2)
+        # 1x1x64
+        self.conv6 = ConvBlock(64, 64, kernel_size=1, stride=1, padding=0)
+        # 1x1x64
+        self.classifier = nn.Linear(64 * 1 * 1, num_classes)
 
     def forward(self, x):
 
@@ -80,5 +84,10 @@ class Conv2dClassifier(nn.Module):
         x = self.conv3(x)
         x = self.max_pool(x)
         x = self.conv4(x)
+        x = self.max_pool(x)
+        x = self.conv5(x)
+        x = self.max_pool(x)
+        x = self.conv6(x)
+
         x = x.view(x.size(0), -1)
         return self.classifier(x)

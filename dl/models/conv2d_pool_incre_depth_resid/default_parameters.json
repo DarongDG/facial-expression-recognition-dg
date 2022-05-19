@@ -1,0 +1,17 @@
+{
+	"cuda": true,
+	"train_batch_size": 128,
+	"test_batch_size": 128,
+	"imsize": 48, 
+	"n_channels": 1,  
+	"ngf": 64,
+	"epochs": 50,
+	"lr": 0.05,
+	"b1": 0.5,
+	"b2": 0.999,
+	"gaussian_noise_std": 0.01,
+	"max_epochs": 50,
+	"early_stopping_patience": 50,
+	"reduce_lr_on_plateau_patience": 0,
+	"data_location": "fer2013.csv"
+}

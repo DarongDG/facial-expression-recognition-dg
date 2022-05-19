@@ -10,7 +10,7 @@ import torchmetrics
 from torchmetrics.classification import accuracy
 #
 
-from dl.base_lightning_modules.plotter import plot_train_loss
+from dl.base_lightning_modules.plotter import plot_train_loss, plot_acc
 
 
 class BaseClassificationModel(LightningModule):
@@ -21,11 +21,14 @@ class BaseClassificationModel(LightningModule):
         self.generator = t.nn.Sequential()
         self.loss = t.nn.CrossEntropyLoss()
         self.val_accuracy = torchmetrics.Accuracy()
+        self.train_accuracy = torchmetrics.Accuracy()
         self.test_accuracy = torchmetrics.Accuracy()
         self.num_classes = 7
         self.iteration = 0
         self.train_loss_list = []
         self.val_loss_list = []
+        self.train_acc_list = []
+        self.val_acc_list = []
 
     def forward(self, z: t.Tensor) -> t.Tensor:
         out = self.generator(z)
@@ -36,27 +39,33 @@ class BaseClassificationModel(LightningModule):
         x, y = batch
         y_pred = self(x)
         loss = self.loss(y_pred, y)
+        self.train_accuracy.update(y_pred, y)
         if self.iteration % 50 == 0:
             self.train_loss_list.append((self.iteration,loss.item()))
+
         return {"loss": loss}
 
     def validation_epoch_end(self, outputs):
         acc = self.val_accuracy.compute()
-        self.log("accuracy", acc, prog_bar=True)
-        self.log("val_loss", 1 - acc, prog_bar=True)
+        self.log("val_accuracy", acc, prog_bar=True)
+        self.val_acc_list.append((self.iteration, acc.item()))
         avg_loss = t.stack([x["val_loss_ce"] for x in outputs]).mean()
-        self.log("val_loss_ce", avg_loss, prog_bar=True)
+        self.log("val_loss", avg_loss, prog_bar=True)
         self.val_loss_list.append((self.iteration, avg_loss.item()))
         self.val_accuracy.reset()
         t.save(
             self.state_dict(), os.path.join(self.params.save_path, "checkpoint.ckpt"),
         )
-        plot_train_loss(self.train_loss_list, self.val_loss_list,
-                        save_path=self.params.save_path)
+        plot_acc(self.val_acc_list, save_path=self.params.save_path)
+        plot_train_loss(self.train_loss_list, self.val_loss_list, save_path=self.params.save_path)
 
-        return {"val_loss": acc}
+        return {"val_loss": avg_loss}
 
     def training_epoch_end(self, outputs):
+        train_acc = self.train_accuracy.compute()
+        self.log("train_accuracy", train_acc, prog_bar=True)
+        self.train_acc_list.append((self.iteration, train_acc.item()))
+        self.train_accuracy.reset()
         avg_loss = t.stack([x["loss"] for x in outputs]).mean()
 
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):

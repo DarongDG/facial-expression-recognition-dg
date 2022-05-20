@@ -13,5 +13,5 @@
 	"max_epochs": 50,
 	"early_stopping_patience": 50,
 	"reduce_lr_on_plateau_patience": 0,
-	"data_location": "fer2013.csv"
+	"data_location": "./datasets/fer.csv"
 }

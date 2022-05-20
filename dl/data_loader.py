@@ -15,30 +15,19 @@ from torchvision import transforms, utils
 # load dataa
 from dl.custom_fer_loaders import DataFER
 
-df = pd.read_csv("fer2013.csv")
-# split train test valid
-df_train = df[df.Usage == 'Training'].drop(['Usage'], axis=1).reset_index().drop(columns="index")
-df_valid = df[df.Usage == 'PrivateTest'].drop(['Usage'], axis=1).reset_index().drop(columns="index")
-df_test = df[df.Usage == 'PublicTest'].drop(['Usage'], axis=1).reset_index().drop(columns="index")
-train_images = df_train.iloc[:, 1]
-train_labels = df_train.iloc[:, 0]
-valid_images = df_train.iloc[:, 1]
-valid_labels = df_train.iloc[:, 0]
-test_images = df_test.iloc[:, 1]
-test_labels = df_test.iloc[:, 0]
-
 
 train_trans = transforms.Compose(
     [
         transforms.ToPILImage(),
         transforms.Grayscale(num_output_channels=1),
-        transforms.RandomCrop(48, padding=4, padding_mode='reflect'),
+        transforms.RandomCrop(48, padding=4, padding_mode="reflect"),
         # maybe useful
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         # normalize
-        transforms.Normalize((0.5), (0.5), inplace=True)
-    ])
+        transforms.Normalize((0.5), (0.5), inplace=True),
+    ]
+)
 
 # transform data for validation (just greyscale and normalize)
 val_trans = transforms.Compose(
@@ -46,8 +35,9 @@ val_trans = transforms.Compose(
         transforms.ToPILImage(),
         transforms.Grayscale(num_output_channels=1),
         transforms.ToTensor(),
-        transforms.Normalize((0.5), (0.5))
-    ])
+        transforms.Normalize((0.5), (0.5)),
+    ]
+)
 
 
 class CustomDataModule(LightningDataModule):
@@ -57,10 +47,36 @@ class CustomDataModule(LightningDataModule):
         self.train_batch_size = params.train_batch_size
         self.test_batch_size = params.test_batch_size
         # self.data_location = params.data_location
+        df = pd.read_csv(params.data_location)
+        # split train test valid
+        df_train = (
+            df[df.Usage == "Training"]
+            .drop(["Usage"], axis=1)
+            .reset_index()
+            .drop(columns="index")
+        )
+        df_valid = (
+            df[df.Usage == "PrivateTest"]
+            .drop(["Usage"], axis=1)
+            .reset_index()
+            .drop(columns="index")
+        )
+        df_test = (
+            df[df.Usage == "PublicTest"]
+            .drop(["Usage"], axis=1)
+            .reset_index()
+            .drop(columns="index")
+        )
+        self.train_images = df_train.iloc[:, 1]
+        self.train_labels = df_train.iloc[:, 0]
+        self.valid_images = df_train.iloc[:, 1]
+        self.valid_labels = df_train.iloc[:, 0]
+        self.test_images = df_test.iloc[:, 1]
+        self.test_labels = df_test.iloc[:, 0]
 
     def train_dataloader(self):
         # creates a DeepCoastalDataset object
-        dataset = DataFER(train_images, train_labels, train_trans)
+        dataset = DataFER(self.train_images, self.train_labels, train_trans)
         return DataLoader(
             dataset,
             batch_size=self.train_batch_size,
@@ -70,7 +86,7 @@ class CustomDataModule(LightningDataModule):
 
     def val_dataloader(self):
         # creates a DeepCoastalDataset object
-        dataset = DataFER(valid_images, valid_labels, val_trans)
+        dataset = DataFER(self.valid_images, self.valid_labels, val_trans)
         return DataLoader(
             dataset,
             batch_size=self.train_batch_size,
@@ -80,7 +96,7 @@ class CustomDataModule(LightningDataModule):
 
     def test_dataloader(self):
 
-        dataset = DataFER(train_images, train_labels, train_trans)
+        dataset = DataFER(self.train_images, self.train_labels, train_trans)
         return DataLoader(
             dataset,
             batch_size=self.train_batch_size,
@@ -114,6 +130,6 @@ def test():
     """
     # reads file in h5 format
 
+
 if __name__ == "__main__":
     test()
-

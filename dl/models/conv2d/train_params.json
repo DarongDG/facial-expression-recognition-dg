@@ -1,6 +1,6 @@
 {
     "model": "conv2d",
-    "target": "C:\\Users\\daron\\PycharmProjects\\facial-expression-recognition-dg\\dlm\\results",
+    "target": "/home/al/Github/facial-expression-recognition-dg/dlm/results",
     "cuda": true,
     "train_batch_size": 128,
     "test_batch_size": 128,
@@ -18,6 +18,6 @@
     "max_epochs": 20,
     "early_stopping_patience": 5,
     "reduce_lr_on_plateau_patience": 0,
-    "data_location": "fer2013.csv",
+    "data_location": "./datasets/fer.csv",
     "crop": 64
 }

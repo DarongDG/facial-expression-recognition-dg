@@ -12,21 +12,21 @@ class ResidualAxialBlock(nn.Module):
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
 
-        self.attention = AxialAttention(embedding_dim, num_dimentions, num_heads, 4, -1, True)
+        self.attention = AxialAttention(
+            embedding_dim, num_dimentions, num_heads, -1, True
+        )
         self.do = nn.Dropout(droupout)
         self.act = nn.ReLU()
 
     def forward(self, x):
         z = self.attention(x)
-        out = z + x
-        out = self.act(out)
-        out = self.do(out)
+        out = self.do(z)
         return out
 
 
 class AxialClassifier(nn.Module):
     def __init__(
-        self, num_classes=7, embedding_dim=16, num_heads=4, num_layers=2, dropout=0.01
+        self, num_classes=7, embedding_dim=16, num_heads=4, num_layers=8, dropout=0.1
     ):
         super().__init__()
 
@@ -59,14 +59,6 @@ class AxialClassifier(nn.Module):
         )
 
         self.classifier = nn.Linear(48 * 48, self.num_classes)
-        self.sigmoid = nn.Sigmoid()
-        # self.big_classifier = nn.Sequential(
-        #     nn.Linear(48 * 48, 1024),
-        #     nn.ReLU(),
-        #     nn.Linear(1024, 512),
-        #     nn.ReLU(),
-        #     nn.Linear(512, self.num_classes),
-        # )
 
     def forward(self, x):
         # ipdb.set_trace()
@@ -76,11 +68,7 @@ class AxialClassifier(nn.Module):
         x = self.attentions(x)
 
         x = x.max(dim=-1)[0]
-        # x = x.permute(0, 3, 1, 2)
-        # x = self.avg_pool_classifier(x)
-
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
 
-        x = self.sigmoid(x)
-        return x # F.softmax(x, dim=1)
+        return x  # F.softmax(x, dim=1)

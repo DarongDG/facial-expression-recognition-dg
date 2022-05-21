@@ -1,6 +1,6 @@
 {
     "model": "axial",
-    "target": "/home/al/Project/facial-expression-recognition/dlm/results",
+    "target": "/home/al/Github/facial-expression-recognition-dg/dlm/results",
     "cuda": true,
     "train_batch_size": 128,
     "test_batch_size": 128,

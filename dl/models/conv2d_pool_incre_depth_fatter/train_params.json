@@ -16,7 +16,7 @@
     "in_seq_len": 5,
     "out_seq_len": 5,
     "max_epochs": 50,
-    "early_stopping_patience": 50,
+    "early_stopping_patience": 100,
     "reduce_lr_on_plateau_patience": 0,
     "data_location": "./datasets/fer.csv",
     "crop": 64

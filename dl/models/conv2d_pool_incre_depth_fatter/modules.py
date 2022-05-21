@@ -68,6 +68,8 @@ class Conv2dClassifier(nn.Module):
 
     def forward(self, x):
 
+        x = self.noise_layer(x)
+
         x = self.conv1(x)
         x = self.max_pool(x)
         x = self.conv2(x)

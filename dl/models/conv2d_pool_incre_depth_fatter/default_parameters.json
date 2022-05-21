@@ -11,7 +11,7 @@
 	"b2": 0.999,
 	"gaussian_noise_std": 0.01,
 	"max_epochs": 50,
-	"early_stopping_patience": 50,
+	"early_stopping_patience": 100,
 	"reduce_lr_on_plateau_patience": 0,
 	"data_location": "./datasets/fer.csv"
 }

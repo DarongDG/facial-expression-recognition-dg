@@ -20,6 +20,7 @@ train_trans = transforms.Compose(
     [
         transforms.ToPILImage(),
         transforms.Grayscale(num_output_channels=1),
+        transforms.RandomRotation(0.3),
         transforms.RandomCrop(48, padding=4, padding_mode="reflect"),
         # maybe useful
         transforms.RandomHorizontalFlip(),
@@ -81,7 +82,7 @@ class CustomDataModule(LightningDataModule):
             dataset,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=1,
+            num_workers=16,
         )
 
     def val_dataloader(self):
@@ -91,7 +92,7 @@ class CustomDataModule(LightningDataModule):
             dataset,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=1,
+            num_workers=16,
         )
 
     def test_dataloader(self):
@@ -101,7 +102,7 @@ class CustomDataModule(LightningDataModule):
             dataset,
             batch_size=self.train_batch_size,
             drop_last=True,
-            num_workers=1,
+            num_workers=16,
         )
 
 

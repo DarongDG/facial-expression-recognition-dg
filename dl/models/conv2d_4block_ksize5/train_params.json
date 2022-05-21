@@ -1,5 +1,5 @@
 {
-    "model": "conv2d_4block",
+    "model": "conv2d_4block_ksize5",
     "target": "C:\\Users\\daron\\PycharmProjects\\facial-expression-recognition-dg\\dlm\\results",
     "cuda": true,
     "train_batch_size": 128,

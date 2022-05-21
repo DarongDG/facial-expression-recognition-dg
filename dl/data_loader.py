@@ -69,8 +69,8 @@ class CustomDataModule(LightningDataModule):
         )
         self.train_images = df_train.iloc[:, 1]
         self.train_labels = df_train.iloc[:, 0]
-        self.valid_images = df_train.iloc[:, 1]
-        self.valid_labels = df_train.iloc[:, 0]
+        self.valid_images = df_valid.iloc[:, 1]
+        self.valid_labels = df_valid.iloc[:, 0]
         self.test_images = df_test.iloc[:, 1]
         self.test_labels = df_test.iloc[:, 0]
 
@@ -96,7 +96,7 @@ class CustomDataModule(LightningDataModule):
 
     def test_dataloader(self):
 
-        dataset = DataFER(self.train_images, self.train_labels, train_trans)
+        dataset = DataFER(self.test_images, self.test_labels, val_trans)
         return DataLoader(
             dataset,
             batch_size=self.train_batch_size,

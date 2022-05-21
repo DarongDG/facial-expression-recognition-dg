@@ -1,6 +1,9 @@
+import ipdb
 from torch import nn
 import torch as t
 from torch.functional import F
+from torch.nn import MaxPool2d
+
 from ...base_torch_modules.gaussian_noise import GaussianNoise
 
 # ConvBlock with BatchNorm, Dropout and Activation
@@ -42,33 +45,22 @@ class ConvBlock(nn.Module):
         return x
 
 
-# A conv2d classifier
+# A conv2d_stride classifier
 class Conv2dClassifier(nn.Module):
     def __init__(self, c_in=1, num_classes=7):
         super().__init__()
 
-        self.noise_layer = GaussianNoise(0.1)
-
         # 48x48x1
         self.conv1 = ConvBlock(c_in, 64, kernel_size=3, stride=1, padding=1)
+        self.max_pool = MaxPool2d(kernel_size=2, stride=2)
         # 48x48x64
-        self.conv2 = ConvBlock(64, 64, kernel_size=3, stride=2, padding=1)
+        self.conv2 = ConvBlock(64, 64, kernel_size=3, stride=1, padding=1)
         # 24x24x64
-        self.conv3 = ConvBlock(64, 64, kernel_size=3, stride=2, padding=1)
-        # 12x12x64
-        self.conv4 = ConvBlock(64, 64, kernel_size=3, stride=2, padding=1)
-        # 6x6x64
-
-        self.classifier = nn.Linear(64 * 6 * 6, num_classes)
+        self.classifier = nn.Linear(64 * 24 * 24, num_classes)
 
     def forward(self, x):
-
-        if self.training:
-            x = self.noise_layer(x)
-
         x = self.conv1(x)
+        x = self.max_pool(x)
         x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
         x = x.view(x.size(0), -1)
         return self.classifier(x)

@@ -54,7 +54,7 @@ class ConvBlock(nn.Module):
         return x
 
 
-# A conv2d classifier
+# A conv2d_stride classifier
 class Conv2dClassifier(nn.Module):
     def __init__(self, c_in=1, num_classes=7):
         super().__init__()

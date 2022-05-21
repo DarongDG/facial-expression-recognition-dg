@@ -8,6 +8,8 @@ import ipdb
 import os
 import torchmetrics
 from torchmetrics.classification import accuracy
+import numpy
+
 #
 
 from dl.base_lightning_modules.plotter import plot_train_loss, plot_acc
@@ -29,6 +31,7 @@ class BaseClassificationModel(LightningModule):
         self.val_loss_list = []
         self.train_acc_list = []
         self.val_acc_list = []
+        self.rand_img = None
 
     def forward(self, z: t.Tensor) -> t.Tensor:
         out = self.generator(z)
@@ -41,8 +44,9 @@ class BaseClassificationModel(LightningModule):
         loss = self.loss(y_pred, y)
         self.train_accuracy.update(y_pred, y)
         if self.iteration % 50 == 0:
-            self.train_loss_list.append((self.iteration,loss.item()))
+            self.train_loss_list.append((self.iteration, loss.item()))
 
+        self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
         return {"loss": loss}
 
     def validation_epoch_end(self, outputs):
@@ -54,11 +58,16 @@ class BaseClassificationModel(LightningModule):
         self.val_loss_list.append((self.iteration, avg_loss.item()))
         self.val_accuracy.reset()
         t.save(
-            self.state_dict(), os.path.join(self.params.save_path, "checkpoint.ckpt"),
+            self.state_dict(),
+            os.path.join(self.params.save_path, "checkpoint.ckpt"),
         )
         plot_acc(self.val_acc_list, save_path=self.params.save_path)
-        plot_train_loss(self.train_loss_list, self.val_loss_list, save_path=self.params.save_path)
-
+        plot_train_loss(
+            self.train_loss_list, self.val_loss_list, save_path=self.params.save_path
+        )
+        self.logger.experiment.add_scalar(
+            "val_lass/epoch", avg_loss, self.current_epoch
+        )
         return {"val_loss": avg_loss}
 
     def training_epoch_end(self, outputs):
@@ -67,6 +76,14 @@ class BaseClassificationModel(LightningModule):
         self.train_acc_list.append((self.iteration, train_acc.item()))
         self.train_accuracy.reset()
         avg_loss = t.stack([x["loss"] for x in outputs]).mean()
+        self.logger.experiment.add_scalar(
+            "train_loss/epoch", avg_loss, self.current_epoch
+        )
+
+        if self.current_epoch == 0:
+            sample = t.zeros(1, 1, 48, 48)
+            sample = sample.to(self.device)
+            self.logger.experiment.add_graph(self.generator, sample)
 
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
@@ -75,6 +92,8 @@ class BaseClassificationModel(LightningModule):
         pred_y = self(x)
         loss = self.loss(pred_y, y).to(self.device)
         self.val_accuracy.update(pred_y, y)
+        self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
+
         return {"val_loss_ce": loss}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
@@ -83,26 +102,35 @@ class BaseClassificationModel(LightningModule):
             pass
         pred_y = self(x)
         self.test_accuracy.update(pred_y, y)
-        return 
+        loss = self.loss(pred_y, y).to(self.device)
+        self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
+        if self.rand_img is None:
+            self.rand_img = x
+        return
 
     def test_epoch_end(self, outputs):
         accuracy = self.test_accuracy.compute()
         self.test_accuracy.reset()
-        test_metrics = {
-            "accuracy": accuracy,
-        }
-        test_metrics = {k: v for k, v in test_metrics.items()}
-        self.log("lol", test_metrics, prog_bar=True)
+        self.log("test_accuracy", accuracy, prog_bar=True)
+        self.test_accuracy.reset()
+        self.logger.experiment.add_scalar(
+            "test_accuracy/epoch", accuracy, self.current_epoch
+        )
+        self.showActivations(self.rand_img)
+
+        # test_metrics = {
+        #     "accuracy": accuracy,
+        # }
+        # test_metrics = {k: v for k, v in test_metrics.items()}
+        # self.log("lol", test_metrics, prog_bar=True)
 
     def configure_optimizers(self):
         lr = self.params.lr
         b1 = self.params.b1
         b2 = self.params.b2
 
-        optimizer = t.optim.Adam(
-            self.generator.parameters(), lr=lr, betas=(b1, b2)
-        )
-        
+        optimizer = t.optim.Adam(self.generator.parameters(), lr=lr, betas=(b1, b2))
+
         scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             mode="min",
@@ -117,3 +145,89 @@ class BaseClassificationModel(LightningModule):
             "lr_scheduler": scheduler,
             "monitor": "val_loss",
         }
+
+    """
+    other necessary functions already written
+    """
+
+    def makegrid(self, output, numrows):
+        outer = t.Tensor.cpu(output).detach()
+        plt.figure(figsize=(20, 5))
+        b = numpy.array([]).reshape(0, outer.shape[2])
+        c = numpy.array([]).reshape(numrows * outer.shape[2], 0)
+        i = 0
+        j = 0
+        while i < outer.shape[1]:
+            img = outer[0][i]
+            b = numpy.concatenate((img, b), axis=0)
+            j += 1
+            if j == numrows:
+                c = numpy.concatenate((c, b), axis=1)
+                b = numpy.array([]).reshape(0, outer.shape[2])
+                j = 0
+
+            i += 1
+        return c
+
+    def showActivations(self, x):
+        # logging reference image
+        rand_first = t.randint(0, x.shape[0], (1,))[0]
+        detached = x[rand_first, ...].cpu().detach() * 0.5 + 0.5
+        x = x[rand_first, ...].unsqueeze(0)
+        self.logger.experiment.add_image("input", detached, self.current_epoch)
+
+        # logging layer 1 activations
+        out = self.generator.conv1(x)
+        c = self.makegrid(out, 4)
+        self.logger.experiment.add_image(
+            "layer 1", c, self.current_epoch, dataformats="HW"
+        )
+
+        # visualize kernels
+        # ipdb.set_trace()
+        kernel = self.generator.conv1.conv.weight.cpu()
+        # ipdb.set_trace()
+        # kernel = self.makegrid(kernel, 1)
+        kernel = kernel[:64,...]
+        self.logger.experiment.add_image(
+            "kernel 1",
+            kernel,
+            self.current_epoch,
+            dataformats="NCHW",
+        )
+
+        # logging layer 1 activations
+        out = self.generator.conv2(out)
+        c = self.makegrid(out, 8)
+        self.logger.experiment.add_image(
+            "layer 2", c, self.current_epoch, dataformats="HW"
+        )
+        kernel = self.generator.conv2.conv.weight.cpu()
+        kernel = self.makegrid(kernel, 8)
+        self.logger.experiment.add_image(
+            "kernel 2", kernel, self.current_epoch, dataformats="HW"
+        )
+        # # logging layer 1 activations
+        out = self.generator.conv3(out)
+        c = self.makegrid(out, 8)
+        self.logger.experiment.add_image(
+            "layer 3", c, self.current_epoch, dataformats="HW"
+        )
+        kernel = self.generator.conv3.conv.weight.cpu()
+        kernel = self.makegrid(kernel, 8)
+        self.logger.experiment.add_image(
+            "kernel 3", kernel, self.current_epoch, dataformats="HW"
+        )
+
+        # conv3
+        out = self.generator.conv4(out)
+        c = self.makegrid(out, 8)
+        self.logger.experiment.add_image(
+            "layer 4", c, self.current_epoch, dataformats="HW"
+        )
+        kernel = self.generator.conv4.conv.weight.cpu()
+
+        kernel = self.makegrid(kernel, 8)
+        self.logger.experiment.add_image(
+            "kernel 4", kernel, self.current_epoch, dataformats="HW"
+        )

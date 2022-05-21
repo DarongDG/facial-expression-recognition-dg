@@ -17,6 +17,70 @@ import seaborn as sns
 from dl.base_lightning_modules.plotter import plot_train_loss, plot_acc
 
 
+class MetricTracker:
+    def __init__(self, num_classes=7, key="train", *args, **kwargs):
+
+        self.key = key
+        self.num_classes = num_classes
+
+        self.metrics = {
+            "F1-Score": torchmetrics.F1Score(num_classes=num_classes, average="macro"),
+            "Precision": torchmetrics.Precision(
+                num_classes=num_classes, average="macro"
+            ),
+            "Recall": torchmetrics.Recall(num_classes=num_classes, average="macro"),
+            "Confusion Matrix": torchmetrics.ConfusionMatrix(
+                num_classes=num_classes, normalize="true"
+            ),
+            "Accuracy": torchmetrics.Accuracy(),
+        }
+
+    def get_metrics(self):
+        return {
+            metric_name: metric.compute()
+            for metric_name, metric in self.metrics.items()
+        }
+
+    def update(self, output, target):
+
+        # set both devices to same
+        output = output
+        target = target
+
+        # ipdb.set_trace()
+        for metric in self.metrics.values():
+            metric.update(output.detach().cpu(), target.detach().cpu())
+
+    def reset(self):
+        for metric in self.metrics.values():
+            metric.reset()
+
+    def log(self, logger, epoch):
+        for metric_name, metric in self.metrics.items():
+            if metric_name == "Confusion Matrix":
+                self.save_confusion_matrix(
+                    logger, metric.compute().detach().numpy(), epoch
+                )
+
+            else:
+                logger.experiment.add_scalar(
+                    f"{self.key}_{metric_name}/epoch", metric.compute().detach(), epoch
+                )
+            metric.reset()
+
+    def save_confusion_matrix(self, logger, confusion_matrix, epoch):
+
+        df_cm = pd.DataFrame(
+            confusion_matrix,
+            index=range(self.num_classes),
+            columns=range(self.num_classes),
+        )
+        plt.figure(figsize=(7, 7))
+        fig_ = sns.heatmap(df_cm, annot=True, cmap="Spectral").get_figure()
+        plt.close(fig_)
+        logger.experiment.add_figure(f"{self.key} Confusion", fig_, epoch)
+
+
 class BaseClassificationModel(LightningModule):
     def __init__(self, params: Namespace):
         super().__init__()
@@ -26,13 +90,14 @@ class BaseClassificationModel(LightningModule):
 
         self.generator = t.nn.Sequential()
         self.loss = t.nn.CrossEntropyLoss()
+
         self.val_accuracy = torchmetrics.Accuracy()
         self.train_accuracy = torchmetrics.Accuracy()
         self.test_accuracy = torchmetrics.Accuracy()
-        self.f1 = torchmetrics.F1(self.num_classes)
-        self.recal = torchmetrics.Recall(self.num_classes)
-        self.precicion = torchmetrics.Precision(self.num_classes)
-        self.confusion_matrix = torchmetrics.ConfusionMatrix(self.num_classes, normalize='true')
+
+        self.test_metrics = MetricTracker(self.num_classes, key="Test")
+        self.train_metrics = MetricTracker(self.num_classes, key="Train")
+        self.val_metrics = MetricTracker(self.num_classes, key="Val")
 
         self.iteration = 0
         self.train_loss_list = []
@@ -50,11 +115,12 @@ class BaseClassificationModel(LightningModule):
         x, y = batch
         y_pred = self(x)
         loss = self.loss(y_pred, y)
-        self.train_accuracy.update(y_pred, y)
+        self.train_metrics.update(y_pred, y)
         if self.iteration % 50 == 0:
             self.train_loss_list.append((self.iteration, loss.item()))
-
         self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
+        self.train_accuracy.update(y_pred, y)
+
         return {"loss": loss}
 
     def validation_epoch_end(self, outputs):
@@ -74,8 +140,11 @@ class BaseClassificationModel(LightningModule):
             self.train_loss_list, self.val_loss_list, save_path=self.params.save_path
         )
         self.logger.experiment.add_scalar(
-            "val_lass/epoch", avg_loss, self.current_epoch
+            "val_loss/epoch", avg_loss, self.current_epoch
         )
+
+        self.val_metrics.log(self.logger, self.current_epoch)
+
         return {"val_loss": avg_loss}
 
     def training_epoch_end(self, outputs):
@@ -93,6 +162,8 @@ class BaseClassificationModel(LightningModule):
             sample = sample.to(self.device)
             self.logger.experiment.add_graph(self.generator, sample)
 
+        self.train_metrics.log(self.logger, self.current_epoch)
+
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         if batch_idx == 0:
@@ -102,6 +173,8 @@ class BaseClassificationModel(LightningModule):
         self.val_accuracy.update(pred_y, y)
         self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
 
+        self.val_metrics.update(pred_y, y)
+
         return {"val_loss_ce": loss}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
@@ -109,78 +182,28 @@ class BaseClassificationModel(LightningModule):
         if batch_idx == 0:
             pass
         pred_y = self(x)
-        self.test_accuracy.update(pred_y, y)
+        # self.test_accuracy.update(pred_y, y)
         loss = self.loss(pred_y, y).to(self.device)
         self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
         if self.rand_img is None:
             self.rand_img = x
-        self.f1.update(pred_y, y)
-        self.recal.update(pred_y, y)
-        self.precicion.update(pred_y, y)
-        self.confusion_matrix.update(pred_y, y)
+        self.test_metrics.update(pred_y, y)
+
         return
 
     def test_epoch_end(self, outputs):
-        accuracy = self.test_accuracy.compute()
-        self.test_accuracy.reset()
-        self.log("test_accuracy", accuracy, prog_bar=True)
-        self.test_accuracy.reset()
-        self.logger.experiment.add_scalar(
-            "test_accuracy/epoch", accuracy, self.current_epoch
-        )
-        self.showActivations(self.rand_img)
-
-        # compute metrics
-        self.logger.experiment.add_scalar(
-            "f1/epoch", self.f1.compute(), self.current_epoch
-        )
-        self.logger.experiment.add_scalar(
-            "recall/epoch", self.recal.compute(), self.current_epoch
-        )
-        self.logger.experiment.add_scalar(
-            "precision/epoch", self.precicion.compute(), self.current_epoch
-        )
-
-        self.save_confusion_matrix(
-            self.confusion_matrix.compute().cpu().detach().numpy()
-        )
-        # self.logger.experminet.add_matrix(
-        #     "confusion_matrix/epoch",
-        #     self.confusion_matrix.compute(),
-        #     self.current_epoch,
-        # )
+        # accuracy = self.test_accuracy.compute()
+        # self.test_accuracy.reset()
+        # # self.log("test_accuracy", accuracy, prog_bar=True)
+        # self.test_accuracy.reset()
         # self.logger.experiment.add_scalar(
-        #     "confusion_matrix/epoch",
-        #     self.confusion_matrix.compute(),
-        #     self.current_epoch,
+        #     "test_accuracy/epoch", accuracy, self.current_epoch
         # )
-
-        # reset matrics
-        self.f1.reset()
-        self.recal.reset()
-        self.precicion.reset()
-        self.confusion_matrix.reset()
-
-        # test_metrics = {
-        #     "accuracy": accuracy,
-        # }
-        # test_metrics = {k: v for k, v in test_metrics.items()}
-        # self.log("lol", test_metrics, prog_bar=True)
-
-    def save_confusion_matrix(self, confusion_matrix):
-        # normalize confusion matrix
-        # confusion_matrix = confusion_matrix / confusion_matrix.sum(axis=1)[:, None]
-        print(confusion_matrix)
-
-        df_cm = pd.DataFrame(
-            confusion_matrix,
-            index=range(self.num_classes),
-            columns=range(self.num_classes),
-        )
-        plt.figure(figsize=(7, 7))
-        fig_ = sns.heatmap(df_cm, annot=True, cmap="Spectral").get_figure()
-        plt.close(fig_)
-        self.logger.experiment.add_figure("Confusion matrix", fig_, self.current_epoch)
+        self.showActivations(self.rand_img)
+        metrics = self.test_metrics.get_metrics()
+        self.test_metrics.log(self.logger, self.current_epoch)
+        for key, value in metrics.items():
+            self.log(key, value, prog_bar=True)
 
     def configure_optimizers(self):
         lr = self.params.lr
@@ -205,7 +228,7 @@ class BaseClassificationModel(LightningModule):
         }
 
     """
-    other necessary functions already written
+    necessary for activation visualization
     """
 
     def makegrid(self, output, numrows):

@@ -29,7 +29,7 @@ class ConvBlock(nn.Module):
             padding=padding,
             bias=bias,
         )
-        #2 conv layer in the block
+        #2 conv layer in the blockk
         self.conv2 = nn.Conv2d(
             c_out,
             c_out,

@@ -1,3 +1,4 @@
+import pandas as pd
 from pytorch_lightning import LightningModule
 import torch as t
 import torch.nn.functional as F
@@ -9,6 +10,7 @@ import os
 import torchmetrics
 from torchmetrics.classification import accuracy
 import numpy
+import seaborn as sns
 
 #
 
@@ -20,12 +22,18 @@ class BaseClassificationModel(LightningModule):
         super().__init__()
         self.params = params
         self.save_hyperparameters()
+        self.num_classes = 7
+
         self.generator = t.nn.Sequential()
         self.loss = t.nn.CrossEntropyLoss()
         self.val_accuracy = torchmetrics.Accuracy()
         self.train_accuracy = torchmetrics.Accuracy()
         self.test_accuracy = torchmetrics.Accuracy()
-        self.num_classes = 7
+        self.f1 = torchmetrics.F1(self.num_classes)
+        self.recal = torchmetrics.Recall(self.num_classes)
+        self.precicion = torchmetrics.Precision(self.num_classes)
+        self.confusion_matrix = torchmetrics.ConfusionMatrix(self.num_classes, normalize='true')
+
         self.iteration = 0
         self.train_loss_list = []
         self.val_loss_list = []
@@ -106,6 +114,10 @@ class BaseClassificationModel(LightningModule):
         self.logger.experiment.add_scalar("loss/iteration", loss, self.iteration)
         if self.rand_img is None:
             self.rand_img = x
+        self.f1.update(pred_y, y)
+        self.recal.update(pred_y, y)
+        self.precicion.update(pred_y, y)
+        self.confusion_matrix.update(pred_y, y)
         return
 
     def test_epoch_end(self, outputs):
@@ -118,11 +130,57 @@ class BaseClassificationModel(LightningModule):
         )
         self.showActivations(self.rand_img)
 
+        # compute metrics
+        self.logger.experiment.add_scalar(
+            "f1/epoch", self.f1.compute(), self.current_epoch
+        )
+        self.logger.experiment.add_scalar(
+            "recall/epoch", self.recal.compute(), self.current_epoch
+        )
+        self.logger.experiment.add_scalar(
+            "precision/epoch", self.precicion.compute(), self.current_epoch
+        )
+
+        self.save_confusion_matrix(
+            self.confusion_matrix.compute().cpu().detach().numpy()
+        )
+        # self.logger.experminet.add_matrix(
+        #     "confusion_matrix/epoch",
+        #     self.confusion_matrix.compute(),
+        #     self.current_epoch,
+        # )
+        # self.logger.experiment.add_scalar(
+        #     "confusion_matrix/epoch",
+        #     self.confusion_matrix.compute(),
+        #     self.current_epoch,
+        # )
+
+        # reset matrics
+        self.f1.reset()
+        self.recal.reset()
+        self.precicion.reset()
+        self.confusion_matrix.reset()
+
         # test_metrics = {
         #     "accuracy": accuracy,
         # }
         # test_metrics = {k: v for k, v in test_metrics.items()}
         # self.log("lol", test_metrics, prog_bar=True)
+
+    def save_confusion_matrix(self, confusion_matrix):
+        # normalize confusion matrix
+        # confusion_matrix = confusion_matrix / confusion_matrix.sum(axis=1)[:, None]
+        print(confusion_matrix)
+
+        df_cm = pd.DataFrame(
+            confusion_matrix,
+            index=range(self.num_classes),
+            columns=range(self.num_classes),
+        )
+        plt.figure(figsize=(7, 7))
+        fig_ = sns.heatmap(df_cm, annot=True, cmap="Spectral").get_figure()
+        plt.close(fig_)
+        self.logger.experiment.add_figure("Confusion matrix", fig_, self.current_epoch)
 
     def configure_optimizers(self):
         lr = self.params.lr
@@ -188,7 +246,7 @@ class BaseClassificationModel(LightningModule):
         kernel = self.generator.conv1.conv.weight.cpu()
         # ipdb.set_trace()
         # kernel = self.makegrid(kernel, 1)
-        kernel = kernel[:64,...]
+        kernel = kernel[:64, ...]
         self.logger.experiment.add_image(
             "kernel 1",
             kernel,

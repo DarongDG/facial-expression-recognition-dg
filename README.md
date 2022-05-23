@@ -42,3 +42,11 @@ python -m dlm custom-test <model_name>
 ### Setting parameters for the model
 For each model, you can set the parameters by editing the file `default_parameters.json`, for example setting cuda to false will run the model on cpu.
 
+
+
+## Running the tensorboard
+To run the tensorboard and see metrics and the visualizations, you can use the following command when you are in the root directory of the project:
+
+```
+tensorboard --logdir=logs/
+```
